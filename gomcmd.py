@@ -25,8 +25,10 @@ import sys
 import os
 import optparse
 import re
+import urllib
 
 class ProgException(Exception): pass
+
 
 def register_gnome_url_handler(urltype, command, enabled = True, needs_terminal = False):
 	import gconf # not everyone has gconf, small non-critical performance hit importing
@@ -53,11 +55,15 @@ def register_gnome_url_handler(urltype, command, enabled = True, needs_terminal 
 	v.set_bool(needs_terminal)
 	c.set(dirname + '/needs_terminal', v)
 
+
 def parse_url(url):
-	m = re.match('(.*?)://(.*)$', url)
+	m = re.match('^.*(http://.*)$', url)
 	if not m:
 		raise ProgException('Not in URL format: %s' % url)
-	return (m.group(1), m.group(2))
+	data = urllib.urlopen(m.group(1)).read()
+	m = re.search(r'(http://[^"]*)', data)
+	return m.group(1)
+
 
 try:
 	parser = optparse.OptionParser()
@@ -79,17 +85,9 @@ try:
 		raise ProgException('Too many arguments')
 
 	# convert the argument
-	protocol, target = parse_url(args[0])
+	url = parse_url(args[0])
 
-	if not 'gomcmd' == protocol: raise ProgException("Don't know how to handle protocol: %s" % protocol)
-
-	# extra stream from target:
-	try:
-		url = 'http://%s' % target[target.index('://')+3:]
-	except ValueError:
-		raise ProgException('Not a valid GomTV stream URL: %s' % target)
 	print "opening %s %s" % (opts.media_player, url)
 	os.execlp(opts.media_player, opts.media_player, url)
 except ProgException, e:
 	sys.stderr.write('%s: %s%s' % (parser.get_prog_name(), e, os.linesep))
-
