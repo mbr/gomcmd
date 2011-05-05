@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # coding=utf8
-
 # Copyright (c) 2010 Marc Brinkmann
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,11 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import sys
+import httplib
 import os
 import optparse
 import re
 import urllib
+from urlparse import urlparse
+import subprocess
+import sys
 from xml.dom import minidom
 
 
@@ -61,6 +63,21 @@ def register_gnome_url_handler(urltype,
     c.set(dirname + '/needs_terminal', v)
 
 
+def open_gom_stream(url):
+    o = urlparse(url)
+
+    print 'connecting to', o
+    conn = httplib.HTTPConnection(o.hostname, o.port, timeout=20)
+    request_url = '%s?%s' % (o.path, o.query)
+    print 'getting', request_url
+    conn.request('GET', request_url)
+    resp = conn.getresponse()
+
+    assert(200 == resp.status)
+
+    return resp
+
+
 def parse_url(url):
     m = re.match('^.*(http://.*)$', url)
     if not m:
@@ -73,11 +90,14 @@ def parse_url(url):
 
 try:
     parser = optparse.OptionParser()
-    parser.add_option('-M', '--media-player', default='vlc',
+    parser.add_option('-M', '--media-player', default='vlc file:///dev/stdin',
                       help='the media player to use. defaults to VLC')
     parser.add_option('-G', '--register-gnome-handlers',
                       default=False, action='store_true',
                       help='register url handlers with gnome')
+    parser.add_option('-B', '--prebuffer', default=1024, type="int",
+                      help='how many bytes to buffer before passing to'
+                           'media player')
 
     opts, args = parser.parse_args()
 
@@ -97,8 +117,20 @@ try:
     # convert the argument
     url = parse_url(args[0])
 
-    print "opening %s %s" % (opts.media_player, url)
+    print "opening media player"
+    print opts.media_player
+    media_player = subprocess.Popen(opts.media_player,
+                                    shell=True,
+                                    stdin=subprocess.PIPE)
 
-    os.execlp(opts.media_player, opts.media_player, url)
+    stream = open_gom_stream(url)
+    while True:
+        data = stream.read(opts.prebuffer)
+
+        if not data:
+            print "end of stream, exit"
+
+        # pass on to media player
+        media_player.stdin.write(data)
 except ProgException, e:
     sys.stderr.write('%s: %s%s' % (parser.get_prog_name(), e, os.linesep))
