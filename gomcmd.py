@@ -26,6 +26,7 @@ import os
 import optparse
 import re
 import urllib
+from xml.dom import minidom
 
 class ProgException(Exception): pass
 
@@ -61,8 +62,9 @@ def parse_url(url):
 	if not m:
 		raise ProgException('Not in URL format: %s' % url)
 	data = urllib.urlopen(m.group(1)).read()
-	m = re.search(r'(http://[^"]*)', data)
-	return m.group(1)
+	doc = minidom.parseString(data)
+	ref = doc.getElementsByTagName('REF')[0]
+	return ref.getAttribute('href')
 
 
 try:
@@ -88,6 +90,7 @@ try:
 	url = parse_url(args[0])
 
 	print "opening %s %s" % (opts.media_player, url)
+
 	os.execlp(opts.media_player, opts.media_player, url)
 except ProgException, e:
 	sys.stderr.write('%s: %s%s' % (parser.get_prog_name(), e, os.linesep))
